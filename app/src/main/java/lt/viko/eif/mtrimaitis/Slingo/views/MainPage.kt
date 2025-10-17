@@ -1,18 +1,34 @@
 package lt.viko.eif.mtrimaitis.Slingo.views
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import lt.viko.eif.mtrimaitis.Slingo.components.DiscoverScreen
+import lt.viko.eif.mtrimaitis.Slingo.components.FavoritesScreen
+import lt.viko.eif.mtrimaitis.Slingo.components.LibraryScreen
+import lt.viko.eif.mtrimaitis.Slingo.components.NowPlayingScreen
+import lt.viko.eif.mtrimaitis.Slingo.components.ProfileScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,51 +80,11 @@ fun MainContentScreen(navController: NavHostController) {
                 when (selectedItem) {
                     0 -> LibraryScreen(navController)
                     1 -> NowPlayingScreen(navController)
-                    2 -> Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Discover Music", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-                    }
-                    3 -> Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Your Favorites", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-                    }
+                    2 -> DiscoverScreen(navController)
+                    3 -> FavoritesScreen(navController)
                     4 -> ProfileScreen(navController)
                 }
             }
         }
-    }
-}
-
-@Composable
-fun LibraryScreen(navController: NavHostController) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Your Library", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-fun NowPlayingScreen(navController: NavHostController) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Playing", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-fun ProfileScreen(navController: NavHostController) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Profile", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
     }
 }
