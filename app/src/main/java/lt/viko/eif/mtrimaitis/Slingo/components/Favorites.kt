@@ -20,17 +20,11 @@ import androidx.navigation.NavHostController
 @Composable
 fun FavoritesScreen(
     navController: NavHostController,
-    playlistViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel,
-    musicPlayerViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
+    favoriteViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel,
+    musicPlayerViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel,
+    onNavigateToPlaying: () -> Unit = {}
 ) {
-    val uiState by playlistViewModel.uiState.collectAsState()
-    var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
-    
-    LaunchedEffect(selectedPlaylistId) {
-        if (selectedPlaylistId > 0) {
-            playlistViewModel.loadPlaylistSongs(selectedPlaylistId)
-        }
-    }
+    val uiState by favoriteViewModel.uiState.collectAsState()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp)
@@ -43,15 +37,14 @@ fun FavoritesScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
-        items(uiState.currentPlaylistSongs.size) { index ->
-            val song = uiState.currentPlaylistSongs[index]
+        items(uiState.favoriteSongs.size) { index ->
+            val song = uiState.favoriteSongs[index]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        musicPlayerViewModel.loadSong(song)
-                        musicPlayerViewModel.setPlaylist(uiState.currentPlaylistSongs, index)
-                        musicPlayerViewModel.playPause()
+                        musicPlayerViewModel.setPlaylist(uiState.favoriteSongs, index, autoPlay = true)
+                        onNavigateToPlaying()
                     }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -74,18 +67,24 @@ fun FavoritesScreen(
                     Text(song.artist, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.Favorite, contentDescription = "Favorite", tint = MaterialTheme.colorScheme.primaryContainer)
+                IconButton(onClick = { favoriteViewModel.removeFavorite(song.id) }) {
+                    Icon(
+                        Icons.Filled.Favorite,
+                        contentDescription = "Remove Favorite",
+                        tint = MaterialTheme.colorScheme.primaryContainer
+                    )
+                }
             }
         }
         
-        if (uiState.currentPlaylistSongs.isEmpty()) {
+        if (uiState.favoriteSongs.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "No favorites yet. Add songs to your playlists!",
+                        "No favorites yet. Tap the heart icon on songs to add them!",
                         color = Color.White.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.bodyMedium
                     )

@@ -31,6 +31,7 @@ import lt.viko.eif.mtrimaitis.Slingo.components.LibraryScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.NowPlayingScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.ProfileScreen
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.DiscoverViewModel
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
 
@@ -40,6 +41,8 @@ fun MainContentScreen(
     navController: NavHostController,
     songRepository: lt.viko.eif.mtrimaitis.Slingo.data.SongRepository,
     playlistRepository: lt.viko.eif.mtrimaitis.Slingo.data.PlaylistRepository,
+    favoriteRepository: lt.viko.eif.mtrimaitis.Slingo.data.FavoriteRepository,
+    authViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel,
     currentUserId: Long
 ) {
     var selectedItem by remember { mutableIntStateOf(0) }
@@ -59,14 +62,18 @@ fun MainContentScreen(
         )
     )
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val musicPlayerViewModel: MusicPlayerViewModel = viewModel {
-        MusicPlayerViewModel(songRepository)
+        MusicPlayerViewModel(songRepository, context)
     }
     val discoverViewModel: DiscoverViewModel = viewModel {
         DiscoverViewModel(songRepository)
     }
     val playlistViewModel: PlaylistViewModel = viewModel {
         PlaylistViewModel(playlistRepository, currentUserId)
+    }
+    val favoriteViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel = viewModel {
+        lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel(favoriteRepository)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(gradientBrush)) {
@@ -100,7 +107,8 @@ fun MainContentScreen(
                     0 -> LibraryScreen(
                         navController = navController,
                         playlistViewModel = playlistViewModel,
-                        musicPlayerViewModel = musicPlayerViewModel
+                        musicPlayerViewModel = musicPlayerViewModel,
+                        onNavigateToPlaying = { selectedItem = 1 }
                     )
                     1 -> NowPlayingScreen(
                         navController = navController,
@@ -110,14 +118,25 @@ fun MainContentScreen(
                         navController = navController,
                         discoverViewModel = discoverViewModel,
                         musicPlayerViewModel = musicPlayerViewModel,
-                        playlistViewModel = playlistViewModel
+                        playlistViewModel = playlistViewModel,
+                        favoriteViewModel = favoriteViewModel
                     )
                     3 -> FavoritesScreen(
                         navController = navController,
-                        playlistViewModel = playlistViewModel,
-                        musicPlayerViewModel = musicPlayerViewModel
+                        favoriteViewModel = favoriteViewModel,
+                        musicPlayerViewModel = musicPlayerViewModel,
+                        onNavigateToPlaying = { selectedItem = 1 }
                     )
-                    4 -> ProfileScreen(navController)
+                    4 -> ProfileScreen(
+                        navController = navController,
+                        authViewModel = authViewModel,
+                        onLogout = {
+                            // Navigate back to welcome screen
+                            navController.navigate("welcome") {
+                                popUpTo("main") { inclusive = true }
+                            }
+                        }
+                    )
                 }
             }
         }

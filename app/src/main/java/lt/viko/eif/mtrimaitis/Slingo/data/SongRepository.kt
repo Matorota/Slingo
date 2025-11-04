@@ -22,12 +22,8 @@ class SongRepository(
         }
 
         return try {
-            val clientId = RetrofitClient.getSpotifyClientId()
-            // Note: Spotify requires client_id:client_secret for client credentials flow
-            // Since we only have client_id, we'll use it as-is (this may not work without client_secret)
-            // In production, you would need both client_id and client_secret
-            val credentials = "$clientId:"
-            val auth = "Basic ${Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)}"
+            // Use the proper Basic Auth header with client_id:client_secret
+            val auth = RetrofitClient.getBasicAuthHeader()
             
             val response = spotifyApi.getAccessToken(
                 grantType = "client_credentials",
@@ -57,10 +53,11 @@ class SongRepository(
                 return Result.failure(Exception("Failed to get access token"))
             }
 
+            // Increase limit for better search results
             val response = spotifyApi.searchTracks(
                 query = query,
                 type = "track",
-                limit = 20,
+                limit = 50,
                 authorization = "Bearer $token"
             )
 

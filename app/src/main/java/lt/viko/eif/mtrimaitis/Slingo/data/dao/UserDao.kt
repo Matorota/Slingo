@@ -3,6 +3,7 @@ package lt.viko.eif.mtrimaitis.Slingo.data.dao
 import androidx.room.*
 import lt.viko.eif.mtrimaitis.Slingo.data.models.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 @Dao
 interface UserDao {

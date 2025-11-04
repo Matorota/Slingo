@@ -25,8 +25,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -46,7 +51,8 @@ fun DiscoverScreen(
     navController: NavHostController,
     discoverViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.DiscoverViewModel,
     musicPlayerViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel,
-    playlistViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
+    playlistViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel,
+    favoriteViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel
 ) {
     val uiState by discoverViewModel.uiState.collectAsState()
     val playlistUiState by playlistViewModel.uiState.collectAsState()
@@ -121,9 +127,7 @@ fun DiscoverScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    musicPlayerViewModel.loadSong(song)
-                                    musicPlayerViewModel.setPlaylist(uiState.searchResults, index)
-                                    musicPlayerViewModel.playPause()
+                                    musicPlayerViewModel.setPlaylist(uiState.searchResults, index, autoPlay = true)
                                 }
                         ) {
                             if (song.imageUrl.isNotEmpty()) {
@@ -177,17 +181,37 @@ fun DiscoverScreen(
                                     maxLines = 1
                                 )
                             }
-                            IconButton(
-                                onClick = {
-                                    selectedSongForPlaylist = song
-                                    showAddToPlaylistDialog = true
+                            Row {
+                                var isFavorite by remember { mutableStateOf(false) }
+                                LaunchedEffect(song.id) {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        isFavorite = favoriteViewModel.isFavorite(song.id)
+                                    }
                                 }
-                            ) {
-                                Icon(
-                                    Icons.Filled.Add,
-                                    contentDescription = "Add to Playlist",
-                                    tint = Color.White
-                                )
+                                IconButton(
+                                    onClick = {
+                                        favoriteViewModel.toggleFavorite(song.id)
+                                        isFavorite = !isFavorite
+                                    }
+                                ) {
+                                    Icon(
+                                        if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                        contentDescription = if (isFavorite) "Remove Favorite" else "Add Favorite",
+                                        tint = if (isFavorite) Color.Red else Color.White
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        selectedSongForPlaylist = song
+                                        showAddToPlaylistDialog = true
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = "Add to Playlist",
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
                     }

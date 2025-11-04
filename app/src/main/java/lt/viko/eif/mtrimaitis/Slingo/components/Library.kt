@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -23,12 +25,20 @@ import androidx.navigation.NavHostController
 fun LibraryScreen(
     navController: NavHostController,
     playlistViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel,
-    musicPlayerViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
+    musicPlayerViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel,
+    onNavigateToPlaying: () -> Unit = {}
 ) {
     val uiState by playlistViewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
+    
+    LaunchedEffect(selectedPlaylistId) {
+        if (selectedPlaylistId > 0) {
+            playlistViewModel.loadPlaylistSongs(selectedPlaylistId)
+        }
+    }
 
     Column(modifier = Modifier
         .fillMaxSize()
@@ -87,8 +97,13 @@ fun LibraryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            playlistViewModel.loadPlaylistSongs(playlist.id)
-                            // Navigate to favorites to show playlist songs
+                            // Toggle playlist: if clicking same playlist, close it
+                            if (selectedPlaylistId == playlist.id) {
+                                selectedPlaylistId = -1L
+                            } else {
+                                selectedPlaylistId = playlist.id
+                                playlistViewModel.loadPlaylistSongs(playlist.id)
+                            }
                         }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -111,8 +126,71 @@ fun LibraryScreen(
                         Text("Playlist", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = { /*TODO: Show playlist menu*/ }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color.White)
+                    IconButton(onClick = { 
+                        playlistViewModel.loadPlaylistSongs(playlist.id)
+                    }) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "View Playlist", tint = Color.White)
+                    }
+                }
+            }
+            
+            // Show playlist songs if a playlist is selected
+            if (selectedPlaylistId > 0 && uiState.currentPlaylistSongs.isNotEmpty()) {
+                item {
+                    Text(
+                        "Songs in Playlist",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                }
+                items(uiState.currentPlaylistSongs.size) { index ->
+                    val song = uiState.currentPlaylistSongs[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.Gray.copy(alpha = 0.5f), shape = RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.MusicNote,
+                                contentDescription = "Song",
+                                tint = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    musicPlayerViewModel.setPlaylist(uiState.currentPlaylistSongs, index, autoPlay = true)
+                                    onNavigateToPlaying()
+                                }
+                        ) {
+                            Text(song.name, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                            Text(song.artist, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        IconButton(
+                            onClick = {
+                                musicPlayerViewModel.setPlaylist(uiState.currentPlaylistSongs, index, autoPlay = true)
+                                onNavigateToPlaying()
+                            }
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = Color.White)
+                        }
+                        IconButton(
+                            onClick = {
+                                playlistViewModel.removeSongFromPlaylist(selectedPlaylistId, song.id)
+                            }
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Remove", tint = Color.Red)
+                        }
                     }
                 }
             }

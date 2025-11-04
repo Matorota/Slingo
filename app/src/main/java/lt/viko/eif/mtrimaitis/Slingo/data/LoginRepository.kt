@@ -1,6 +1,7 @@
 package lt.viko.eif.mtrimaitis.Slingo.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import lt.viko.eif.mtrimaitis.Slingo.data.dao.UserDao
 import lt.viko.eif.mtrimaitis.Slingo.data.models.User
 import java.security.MessageDigest
@@ -47,6 +48,27 @@ class LoginRepository(private val userDao: UserDao) {
     }
 
     fun getUserById(id: Long): Flow<User?> = userDao.getUserById(id)
+
+    suspend fun changePassword(userId: Long, oldPassword: String, newPassword: String): Result<Unit> {
+        return try {
+            val user = userDao.getUserById(userId).first()
+            if (user == null) {
+                return Result.failure(Exception("User not found"))
+            }
+
+            val hashedOldPassword = hashPassword(oldPassword)
+            if (user.password != hashedOldPassword) {
+                return Result.failure(Exception("Current password is incorrect"))
+            }
+
+            val hashedNewPassword = hashPassword(newPassword)
+            val updatedUser = user.copy(password = hashedNewPassword)
+            userDao.updateUser(updatedUser)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     private fun hashPassword(password: String): String {
         val bytes = password.toByteArray()

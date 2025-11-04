@@ -39,6 +39,7 @@ fun SlingoApp() {
     val loginRepository = remember { LoginRepository(database.userDao()) }
     val songRepository = remember { SongRepository(database.songDao()) }
     val playlistRepository = remember { PlaylistRepository(database.playlistDao()) }
+    val favoriteRepository = remember { lt.viko.eif.mtrimaitis.Slingo.data.FavoriteRepository(database.favoriteDao()) }
     
     val authViewModel: AuthViewModel = viewModel { 
         AuthViewModel(loginRepository)
@@ -68,6 +69,8 @@ fun SlingoApp() {
                         navController = navController,
                         songRepository = songRepository,
                         playlistRepository = playlistRepository,
+                        favoriteRepository = favoriteRepository,
+                        authViewModel = authViewModel,
                         currentUserId = authViewModel.uiState.value.currentUser?.id ?: 0L
                     ) 
                 }
