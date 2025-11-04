@@ -14,7 +14,7 @@ object DatabaseProvider {
                 AppDatabase::class.java,
                 "slingo_database"
             )
-            .fallbackToDestructiveMigration() // For development - removes data on schema change
+            .fallbackToDestructiveMigration()
             .build()
             INSTANCE = instance
             instance
