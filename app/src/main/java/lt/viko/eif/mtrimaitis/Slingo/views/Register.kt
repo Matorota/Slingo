@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -16,7 +18,8 @@ import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegistrationScreen(navController: NavController) {
+fun RegistrationScreen(navController: NavController, authViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel) {
+    val uiState by authViewModel.uiState.collectAsState()
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -120,17 +123,55 @@ fun RegistrationScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(20.dp))
 
+            if (uiState.errorMessage != null) {
+                Text(
+                    text = uiState.errorMessage!!,
+                    color = Color.Red,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
             Button(
                 onClick = {
-                    // Add actual registration logic here
-                    navController.navigate("login")
+                    if (password == confirmPassword && password.length >= 6) {
+                        authViewModel.register(username, email, password) { user ->
+                            navController.navigate("login")
+                        }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
+                enabled = !uiState.isLoading && username.isNotBlank() && email.isNotBlank() && 
+                         password.isNotBlank() && confirmPassword.isNotBlank() && password == confirmPassword && password.length >= 6,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Text("Register", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text("Register", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            
+            if (password.isNotBlank() && confirmPassword.isNotBlank() && password != confirmPassword) {
+                Text(
+                    text = "Passwords do not match",
+                    color = Color.Red,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            
+            if (password.isNotBlank() && password.length < 6) {
+                Text(
+                    text = "Password must be at least 6 characters",
+                    color = Color.Red,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
             Spacer(modifier = Modifier.height(10.dp))
 

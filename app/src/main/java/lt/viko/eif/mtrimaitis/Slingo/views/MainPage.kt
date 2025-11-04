@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,22 +23,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import lt.viko.eif.mtrimaitis.Slingo.components.DiscoverScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.FavoritesScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.LibraryScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.NowPlayingScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.ProfileScreen
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.DiscoverViewModel
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainContentScreen(navController: NavHostController) {
+fun MainContentScreen(
+    navController: NavHostController,
+    songRepository: lt.viko.eif.mtrimaitis.Slingo.data.SongRepository,
+    playlistRepository: lt.viko.eif.mtrimaitis.Slingo.data.PlaylistRepository,
+    currentUserId: Long
+) {
     var selectedItem by remember { mutableIntStateOf(0) }
 
     val items = listOf(
         Icons.Filled.Home to "Library",
         Icons.Filled.PlayArrow to "Playing",
-        Icons.Filled.LibraryMusic to "Discover",
+        Icons.Filled.Search to "Discover",
         Icons.Filled.Favorite to "Favorites",
         Icons.Filled.Person to "Profile"
     )
@@ -49,6 +58,16 @@ fun MainContentScreen(navController: NavHostController) {
             MaterialTheme.colorScheme.secondary
         )
     )
+
+    val musicPlayerViewModel: MusicPlayerViewModel = viewModel {
+        MusicPlayerViewModel(songRepository)
+    }
+    val discoverViewModel: DiscoverViewModel = viewModel {
+        DiscoverViewModel(songRepository)
+    }
+    val playlistViewModel: PlaylistViewModel = viewModel {
+        PlaylistViewModel(playlistRepository, currentUserId)
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(gradientBrush)) {
         Scaffold(
@@ -78,10 +97,26 @@ fun MainContentScreen(navController: NavHostController) {
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 when (selectedItem) {
-                    0 -> LibraryScreen(navController)
-                    1 -> NowPlayingScreen(navController)
-                    2 -> DiscoverScreen(navController)
-                    3 -> FavoritesScreen(navController)
+                    0 -> LibraryScreen(
+                        navController = navController,
+                        playlistViewModel = playlistViewModel,
+                        musicPlayerViewModel = musicPlayerViewModel
+                    )
+                    1 -> NowPlayingScreen(
+                        navController = navController,
+                        musicPlayerViewModel = musicPlayerViewModel
+                    )
+                    2 -> DiscoverScreen(
+                        navController = navController,
+                        discoverViewModel = discoverViewModel,
+                        musicPlayerViewModel = musicPlayerViewModel,
+                        playlistViewModel = playlistViewModel
+                    )
+                    3 -> FavoritesScreen(
+                        navController = navController,
+                        playlistViewModel = playlistViewModel,
+                        musicPlayerViewModel = musicPlayerViewModel
+                    )
                     4 -> ProfileScreen(navController)
                 }
             }

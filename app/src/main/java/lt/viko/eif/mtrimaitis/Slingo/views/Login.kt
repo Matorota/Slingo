@@ -3,7 +3,10 @@ package lt.viko.eif.mtrimaitis.Slingo.views
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -14,9 +17,10 @@ import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(navController: NavController) {
+fun LoginScreen(navController: NavController, authViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val uiState by authViewModel.uiState.collectAsState()
 
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
@@ -79,14 +83,36 @@ fun LoginScreen(navController: NavController) {
             )
             Spacer(modifier = Modifier.height(20.dp))
 
+            if (uiState.errorMessage != null) {
+                Text(
+                    text = uiState.errorMessage!!,
+                    color = Color.Red,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
             Button(
-                onClick = { navController.navigate("main") },
+                onClick = {
+                    authViewModel.login(email, password) { user ->
+                        navController.navigate("main") {
+                            popUpTo("welcome") { inclusive = true }
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
+                enabled = !uiState.isLoading && email.isNotBlank() && password.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Text("Login", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text("Login", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
             Spacer(modifier = Modifier.height(10.dp))
 
