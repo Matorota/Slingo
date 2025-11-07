@@ -34,7 +34,7 @@ import lt.viko.eif.mtrimaitis.Slingo.viewmodel.DiscoverViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
-
+// The app now builds without needing Spotify’s Maven repo (only 30‑second previews are playable, due to the API limitation).
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContentScreen(
@@ -119,7 +119,8 @@ fun MainContentScreen(
                         discoverViewModel = discoverViewModel,
                         musicPlayerViewModel = musicPlayerViewModel,
                         playlistViewModel = playlistViewModel,
-                        favoriteViewModel = favoriteViewModel
+                        favoriteViewModel = favoriteViewModel,
+                        onNavigateToPlaying = { selectedItem = 1 }
                     )
                     3 -> FavoritesScreen(
                         navController = navController,
@@ -130,6 +131,8 @@ fun MainContentScreen(
                     4 -> ProfileScreen(
                         navController = navController,
                         authViewModel = authViewModel,
+                        playlistViewModel = playlistViewModel,
+                        favoriteViewModel = favoriteViewModel,
                         onLogout = {
                             // Navigate back to welcome screen
                             navController.navigate("welcome") {

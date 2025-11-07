@@ -67,6 +67,32 @@ class AuthViewModel(private val loginRepository: LoginRepository) : ViewModel() 
         _uiState.value = AuthUiState()
     }
 
+    fun verifyCurrentPassword(password: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val currentUser = _uiState.value.currentUser
+            if (currentUser == null) {
+                _uiState.value = _uiState.value.copy(errorMessage = "Not logged in")
+                onResult(false)
+                return@launch
+            }
+
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+
+            loginRepository.verifyPassword(currentUser.id, password)
+                .onSuccess {
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = null)
+                    onResult(true)
+                }
+                .onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = exception.message
+                    )
+                    onResult(false)
+                }
+        }
+    }
+
     fun changePassword(oldPassword: String, newPassword: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             val currentUser = _uiState.value.currentUser

@@ -70,6 +70,24 @@ class LoginRepository(private val userDao: UserDao) {
         }
     }
 
+    suspend fun verifyPassword(userId: Long, password: String): Result<Unit> {
+        return try {
+            val user = userDao.getUserById(userId).first()
+            if (user == null) {
+                return Result.failure(Exception("User not found"))
+            }
+
+            val hashedPassword = hashPassword(password)
+            if (user.password == hashedPassword) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Current password is incorrect"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun hashPassword(password: String): String {
         val bytes = password.toByteArray()
         val md = MessageDigest.getInstance("SHA-256")

@@ -35,9 +35,10 @@ class FavoriteViewModel(private val favoriteRepository: FavoriteRepository) : Vi
         return favoriteRepository.isFavorite(songId)
     }
 
-    fun toggleFavorite(songId: String) {
+    fun toggleFavorite(songId: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            favoriteRepository.toggleFavorite(songId)
+            val isFavorite = favoriteRepository.toggleFavorite(songId)
+            onResult(isFavorite)
         }
     }
 

@@ -1,6 +1,5 @@
 package lt.viko.eif.mtrimaitis.Slingo.data
 
-import android.util.Base64
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import lt.viko.eif.mtrimaitis.Slingo.data.api.RetrofitClient
@@ -58,18 +57,22 @@ class SongRepository(
                 query = query,
                 type = "track",
                 limit = 50,
+                market = "US",
                 authorization = "Bearer $token"
             )
 
             if (response.isSuccessful && response.body() != null) {
-                val tracks = response.body()!!.tracks.items.map { spotifyTrack ->
-                    convertSpotifyTrackToSong(spotifyTrack)
+                val rawItems = response.body()!!.tracks.items
+
+                val songs = rawItems.map { spotifyTrack ->
+                    val enrichedTrack = ensurePreviewAvailability(spotifyTrack, token)
+                    convertSpotifyTrackToSong(enrichedTrack)
                 }
                 
                 // Save to local database
-                songDao.insertSongs(tracks)
+                songDao.insertSongs(songs)
                 
-                Result.success(tracks)
+                Result.success(songs)
             } else {
                 Result.failure(Exception("API call failed: ${response.code()}"))
             }
@@ -77,6 +80,34 @@ class SongRepository(
             e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    private suspend fun ensurePreviewAvailability(track: SpotifyTrack, token: String): SpotifyTrack {
+        if (!track.previewUrl.isNullOrBlank()) {
+            return track
+        }
+
+        val marketsToTry = listOf("US", "GB", "SE")
+
+        marketsToTry.forEach { market ->
+            try {
+                val detailResponse = spotifyApi.getTrack(
+                    id = track.id,
+                    market = market,
+                    authorization = "Bearer $token"
+                )
+                if (detailResponse.isSuccessful) {
+                    val detailedTrack = detailResponse.body()
+                    if (!detailedTrack?.previewUrl.isNullOrBlank()) {
+                        return detailedTrack!!
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        return track
     }
 
     private fun convertSpotifyTrackToSong(track: SpotifyTrack): Song {

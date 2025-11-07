@@ -1,19 +1,23 @@
 package lt.viko.eif.mtrimaitis.Slingo.viewmodel
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import lt.viko.eif.mtrimaitis.Slingo.data.SongRepository
-import lt.viko.eif.mtrimaitis.Slingo.data.models.Song
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import lt.viko.eif.mtrimaitis.Slingo.data.SongRepository
+import lt.viko.eif.mtrimaitis.Slingo.data.models.Song
 import java.io.IOException
 
 data class PlayerState(
@@ -22,7 +26,8 @@ data class PlayerState(
     val currentPosition: Int = 0,
     val duration: Int = 0,
     val playlist: List<Song> = emptyList(),
-    val currentIndex: Int = -1
+    val currentIndex: Int = -1,
+    val errorMessage: String? = null
 )
 
 class MusicPlayerViewModel(
@@ -33,7 +38,7 @@ class MusicPlayerViewModel(
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
     private var mediaPlayer: MediaPlayer? = null
-    private var positionUpdateJob: kotlinx.coroutines.Job? = null
+    private var positionUpdateJob: Job? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
 
@@ -46,74 +51,127 @@ class MusicPlayerViewModel(
     fun loadSong(song: Song, autoPlay: Boolean = false) {
         viewModelScope.launch {
             stopPlayback()
-            
+
             _playerState.value = _playerState.value.copy(
                 currentSong = song,
                 currentPosition = 0,
-                duration = song.duration
+                duration = 0,
+                isPlaying = false,
+                errorMessage = null
             )
 
-            if (song.previewUrl.isNotEmpty()) {
-                try {
-                    // Request audio focus
-                    val audioFocusGranted = requestAudioFocus()
-                    if (!audioFocusGranted) {
-                        android.util.Log.w("MusicPlayer", "Audio focus not granted")
+            if (song.previewUrl.isBlank()) {
+                _playerState.value = _playerState.value.copy(
+                    duration = if (song.duration > 0) song.duration else 0,
+                    currentPosition = 0,
+                    isPlaying = false,
+                    errorMessage = null
+                )
+                android.util.Log.w("MusicPlayer", "Song has no preview URL: ${song.name}")
+                return@launch
+            }
+
+            try {
+                val audioFocusGranted = requestAudioFocus()
+                if (!audioFocusGranted) {
+                    android.util.Log.w("MusicPlayer", "Audio focus not granted")
+                }
+
+                mediaPlayer = MediaPlayer().apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .build()
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        setAudioStreamType(AudioManager.STREAM_MUSIC)
                     }
-                    
-                    mediaPlayer = MediaPlayer().apply {
-                        // Set audio attributes for better compatibility
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .build()
-                            )
+
+                    try {
+                        val mediaUri = Uri.parse(song.previewUrl)
+                        val playbackContext = this@MusicPlayerViewModel.context
+                        if (playbackContext != null) {
+                            setDataSource(playbackContext, mediaUri)
                         } else {
-                            @Suppress("DEPRECATION")
-                            setAudioStreamType(AudioManager.STREAM_MUSIC)
+                            setDataSource(song.previewUrl)
                         }
-                        
-                        setDataSource(song.previewUrl)
-                        setOnPreparedListener { mp ->
-                            android.util.Log.d("MusicPlayer", "MediaPlayer prepared, duration: ${mp.duration}ms")
-                            viewModelScope.launch {
-                                _playerState.value = _playerState.value.copy(
-                                    duration = mp.duration / 1000
-                                )
-                                if (autoPlay) {
-                                    try {
+                    } catch (e: Exception) {
+                        android.util.Log.e("MusicPlayer", "Invalid media URI: ${song.previewUrl}", e)
+                        _playerState.value = _playerState.value.copy(
+                            errorMessage = "Song preview is unavailable."
+                        )
+                        return@launch
+                    }
+                    setOnPreparedListener { mp ->
+                        android.util.Log.d("MusicPlayer", "MediaPlayer prepared, duration: ${mp.duration}ms")
+                        val durationSeconds = if (mp.duration > 0) mp.duration / 1000 else 0
+                        viewModelScope.launch {
+                            _playerState.value = _playerState.value.copy(
+                                duration = durationSeconds,
+                                currentPosition = 0
+                            )
+
+                            if (autoPlay) {
+                                try {
+                                    if (mp.duration > 0) {
                                         mp.start()
-                                        android.util.Log.d("MusicPlayer", "MediaPlayer started")
+                                        android.util.Log.d("MusicPlayer", "MediaPlayer started automatically")
                                         startPositionUpdates()
                                         _playerState.value = _playerState.value.copy(isPlaying = true)
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("MusicPlayer", "Error starting playback: ${e.message}", e)
+                                    } else {
+                                        android.util.Log.w("MusicPlayer", "Invalid duration, cannot play")
                                     }
+                                } catch (e: IllegalStateException) {
+                                    android.util.Log.e("MusicPlayer", "IllegalStateException starting playback: ${e.message}", e)
+                                    mp.reset()
+                                    try {
+                                        mp.setDataSource(song.previewUrl)
+                                        mp.prepareAsync()
+                                    } catch (ex: Exception) {
+                                        android.util.Log.e("MusicPlayer", "Error retrying: ${ex.message}", ex)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MusicPlayer", "Error starting playback: ${e.message}", e)
                                 }
                             }
                         }
-                        setOnErrorListener { mp, what, extra ->
-                            android.util.Log.e("MusicPlayer", "MediaPlayer error: what=$what, extra=$extra")
-                            mp.reset()
-                            false
-                        }
-                        setOnCompletionListener {
-                            android.util.Log.d("MusicPlayer", "Playback completed")
-                            stopPlayback()
-                            releaseAudioFocus()
-                            playNext()
-                        }
-                        prepareAsync()
-                        android.util.Log.d("MusicPlayer", "Preparing MediaPlayer with URL: ${song.previewUrl}")
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("MusicPlayer", "Error loading song: ${e.message}", e)
-                    e.printStackTrace()
+                    setOnErrorListener { mp, what, extra ->
+                        android.util.Log.e("MusicPlayer", "MediaPlayer error: what=$what, extra=$extra")
+                        viewModelScope.launch {
+                            _playerState.value = _playerState.value.copy(isPlaying = false)
+                        }
+                        mp.reset()
+                        false
+                    }
+                    setOnCompletionListener {
+                        android.util.Log.d("MusicPlayer", "Playback completed")
+                        viewModelScope.launch {
+                            _playerState.value = _playerState.value.copy(
+                                isPlaying = false,
+                                currentPosition = _playerState.value.duration
+                            )
+                            positionUpdateJob?.cancel()
+                            releaseAudioFocus()
+                        }
+                        playNext()
+                    }
+                    prepareAsync()
+                    android.util.Log.d("MusicPlayer", "Preparing MediaPlayer with URL: ${song.previewUrl}")
                 }
-            } else {
-                android.util.Log.w("MusicPlayer", "Song has no preview URL: ${song.name}")
+            } catch (e: IOException) {
+                android.util.Log.e("MusicPlayer", "IOException loading song: ${e.message}", e)
+                _playerState.value = _playerState.value.copy(
+                    errorMessage = "Couldn't start playback. Check your connection and try again."
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MusicPlayer", "Error loading song: ${e.message}", e)
+                _playerState.value = _playerState.value.copy(
+                    errorMessage = "Playback failed: ${e.message}"
+                )
             }
         }
     }
@@ -127,47 +185,52 @@ class MusicPlayerViewModel(
 
         mediaPlayer?.let { player ->
             try {
-                if (_playerState.value.isPlaying) {
-                    // Pause
-                    if (player.isPlaying) {
-                        player.pause()
-                        android.util.Log.d("MusicPlayer", "Playback paused")
-                    }
-                    positionUpdateJob?.cancel()
+                if (_playerState.value.isPlaying && player.isPlaying) {
+                    player.pause()
+                    android.util.Log.d("MusicPlayer", "Playback paused")
                     _playerState.value = _playerState.value.copy(isPlaying = false)
                 } else {
-                    // Play
                     val audioFocusGranted = requestAudioFocus()
                     if (!audioFocusGranted) {
                         android.util.Log.w("MusicPlayer", "Audio focus not granted, cannot play")
                         return
                     }
-                    
-                    // Check if player is prepared
-                    if (player.isPlaying) {
-                        android.util.Log.d("MusicPlayer", "Player already playing")
-                    } else {
-                        try {
+
+                    try {
+                        if (player.duration > 0) {
                             player.start()
                             android.util.Log.d("MusicPlayer", "Playback started")
                             startPositionUpdates()
                             _playerState.value = _playerState.value.copy(isPlaying = true)
-                        } catch (e: IllegalStateException) {
-                            android.util.Log.e("MusicPlayer", "Player not prepared, reloading: ${e.message}")
-                            // Player not prepared, reload
-                            loadSong(currentSong, autoPlay = true)
+                        } else {
+                            android.util.Log.w("MusicPlayer", "Player not prepared yet, waiting...")
+                            viewModelScope.launch {
+                                delay(500)
+                                if (player.duration > 0) {
+                                    player.start()
+                                    startPositionUpdates()
+                                    _playerState.value = _playerState.value.copy(isPlaying = true)
+                                } else {
+                                    android.util.Log.e("MusicPlayer", "Player still not prepared, reloading")
+                                    loadSong(currentSong, autoPlay = true)
+                                }
+                            }
                         }
+                    } catch (e: IllegalStateException) {
+                        android.util.Log.e("MusicPlayer", "IllegalStateException: ${e.message}, reloading")
+                        loadSong(currentSong, autoPlay = true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("MusicPlayer", "Error starting playback: ${e.message}", e)
+                        loadSong(currentSong, autoPlay = true)
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicPlayer", "Error in playPause: ${e.message}", e)
-                // If player is not ready, try to reload
                 if (currentSong.previewUrl.isNotEmpty()) {
                     loadSong(currentSong, autoPlay = true)
                 }
             }
         } ?: run {
-            // If no media player, load and play
             android.util.Log.d("MusicPlayer", "No media player, loading song")
             if (currentSong.previewUrl.isNotEmpty()) {
                 loadSong(currentSong, autoPlay = true)
@@ -180,33 +243,32 @@ class MusicPlayerViewModel(
     fun playNext() {
         val playlist = _playerState.value.playlist
         val currentIndex = _playerState.value.currentIndex
-        
+
         if (playlist.isNotEmpty() && currentIndex < playlist.size - 1) {
             val nextIndex = currentIndex + 1
             val nextSong = playlist[nextIndex]
             _playerState.value = _playerState.value.copy(currentIndex = nextIndex)
-            loadSong(nextSong)
-            playPause()
+            loadSong(nextSong, autoPlay = true)
         }
     }
 
     fun playPrevious() {
         val playlist = _playerState.value.playlist
         val currentIndex = _playerState.value.currentIndex
-        
+
         if (playlist.isNotEmpty() && currentIndex > 0) {
             val prevIndex = currentIndex - 1
             val prevSong = playlist[prevIndex]
             _playerState.value = _playerState.value.copy(currentIndex = prevIndex)
-            loadSong(prevSong)
-            playPause()
+            loadSong(prevSong, autoPlay = true)
         }
     }
 
     fun setPlaylist(playlist: List<Song>, startIndex: Int = 0, autoPlay: Boolean = false) {
         _playerState.value = _playerState.value.copy(
             playlist = playlist,
-            currentIndex = startIndex
+            currentIndex = startIndex,
+            errorMessage = null
         )
         if (playlist.isNotEmpty() && startIndex < playlist.size) {
             loadSong(playlist[startIndex], autoPlay = autoPlay)
@@ -214,27 +276,60 @@ class MusicPlayerViewModel(
     }
 
     fun seekTo(position: Int) {
-        mediaPlayer?.seekTo(position * 1000)
-        _playerState.value = _playerState.value.copy(currentPosition = position)
+        mediaPlayer?.let { player ->
+            try {
+                val positionMs = position * 1000
+                if (player.duration > 0 && positionMs >= 0 && positionMs <= player.duration) {
+                    player.seekTo(positionMs)
+                    _playerState.value = _playerState.value.copy(currentPosition = position)
+                    android.util.Log.d("MusicPlayer", "Seeked to position: ${position}s")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicPlayer", "Error seeking: ${e.message}", e)
+            }
+        }
     }
 
     private fun startPositionUpdates() {
         positionUpdateJob?.cancel()
         positionUpdateJob = viewModelScope.launch {
-            while (_playerState.value.isPlaying && mediaPlayer != null) {
+            var shouldContinue = true
+            while (isActive && shouldContinue) {
+                val player = mediaPlayer ?: break
+
                 try {
-                    mediaPlayer?.let { player ->
-                        if (player.isPlaying) {
-                            val currentPos = player.currentPosition / 1000
-                            _playerState.value = _playerState.value.copy(currentPosition = currentPos)
+                    val durationMs = runCatching { player.duration }.getOrDefault(-1)
+                    val currentPosMs = runCatching { player.currentPosition }.getOrDefault(-1)
+                    val isCurrentlyPlaying = runCatching { player.isPlaying }.getOrDefault(false)
+
+                    if (durationMs <= 0) {
+                        if (durationMs == -1) {
+                            android.util.Log.d("MusicPlayer", "MediaPlayer released, stopping updates")
+                            shouldContinue = false
                         }
+                    } else {
+                        val currentPosSeconds = if (currentPosMs >= 0) currentPosMs / 1000 else 0
+                        val durationSeconds = durationMs / 1000
+
+                        _playerState.value = _playerState.value.copy(
+                            currentPosition = currentPosSeconds,
+                            duration = durationSeconds,
+                            isPlaying = isCurrentlyPlaying
+                        )
                     }
+                } catch (e: IllegalStateException) {
+                    android.util.Log.d("MusicPlayer", "Player state exception, stopping updates", e)
+                    shouldContinue = false
                 } catch (e: Exception) {
-                    android.util.Log.e("MusicPlayer", "Error updating position: ${e.message}")
-                    break
+                    android.util.Log.e("MusicPlayer", "Error updating position: ${e.message}", e)
+                    shouldContinue = false
                 }
-                kotlinx.coroutines.delay(500) // Update every 500ms for smoother progress
+
+                if (shouldContinue) {
+                    delay(200)
+                }
             }
+            android.util.Log.d("MusicPlayer", "Position updates stopped")
         }
     }
 
@@ -260,7 +355,7 @@ class MusicPlayerViewModel(
                 ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
             }
         }
-        return true // If no audio manager, assume granted
+        return true
     }
 
     private fun releaseAudioFocus() {
