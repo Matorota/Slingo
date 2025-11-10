@@ -25,7 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import lt.viko.eif.mtrimaitis.Slingo.components.DiscoverScreen
+import lt.viko.eif.mtrimaitis.Slingo.components.SearchScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.FavoritesScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.LibraryScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.NowPlayingScreen
@@ -50,7 +50,7 @@ fun MainContentScreen(
     val items = listOf(
         Icons.Filled.Home to "Library",
         Icons.Filled.PlayArrow to "Playing",
-        Icons.Filled.Search to "Discover",
+        Icons.Filled.Search to "Search",
         Icons.Filled.Favorite to "Favorites",
         Icons.Filled.Person to "Profile"
     )
@@ -114,8 +114,7 @@ fun MainContentScreen(
                         navController = navController,
                         musicPlayerViewModel = musicPlayerViewModel
                     )
-                    2 -> DiscoverScreen(
-                        navController = navController,
+                    2 -> SearchScreen(
                         discoverViewModel = discoverViewModel,
                         musicPlayerViewModel = musicPlayerViewModel,
                         playlistViewModel = playlistViewModel,

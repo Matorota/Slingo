@@ -21,6 +21,9 @@ interface SongDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSongs(songs: List<Song>)
 
+    @Query("SELECT * FROM songs ORDER BY RANDOM() LIMIT :limit")
+    suspend fun getRandomSongs(limit: Int): List<Song>
+
     @Delete
     suspend fun deleteSong(song: Song)
 }

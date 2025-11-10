@@ -8,8 +8,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     private const val SPOTIFY_CLIENT_ID = "dcea1cbdd55d4c46b738d00caddac5b5"
-    // TODO: Replace with your actual Client Secret from Spotify Dashboard
-    // Click "View client secret" in your Spotify app settings to get this
+
     private const val SPOTIFY_CLIENT_SECRET = "656e6c7ec8fc4d25ae4cc783e5154cd5"
     
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -30,9 +29,8 @@ object RetrofitClient {
         .create(SpotifyApi::class.java)
 
     fun getSpotifyClientId(): String = SPOTIFY_CLIENT_ID
-    
+
     fun getSpotifyClientSecret(): String = SPOTIFY_CLIENT_SECRET
-    
     fun getBasicAuthHeader(): String {
         val credentials = "$SPOTIFY_CLIENT_ID:$SPOTIFY_CLIENT_SECRET"
         return "Basic ${android.util.Base64.encodeToString(credentials.toByteArray(), android.util.Base64.NO_WRAP)}"
