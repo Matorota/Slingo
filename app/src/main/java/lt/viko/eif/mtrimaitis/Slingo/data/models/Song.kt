@@ -13,6 +13,8 @@ data class Song(
     val imageUrl: String = "",
     val previewUrl: String = "",
     val duration: Int = 0,
-    val spotifyUri: String = ""
+    val spotifyUri: String = "",
+    val youtubeVideoId: String = "", // YouTube video ID for full track playback
+    val source: String = "spotify" // "spotify" or "youtube"
 )
 

@@ -198,16 +198,6 @@ fun NowPlayingScreen(
                 )
             }
 
-            if (currentSong.previewUrl.isBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Spotify did not provide an audio preview for this track.",
-                    color = Color.White.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

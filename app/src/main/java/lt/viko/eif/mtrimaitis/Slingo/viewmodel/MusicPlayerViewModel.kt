@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import lt.viko.eif.mtrimaitis.Slingo.data.SongRepository
 import lt.viko.eif.mtrimaitis.Slingo.data.models.Song
 import java.io.IOException
+import java.util.regex.Pattern
 
 data class PlayerState(
     val currentSong: Song? = null,
@@ -60,16 +61,94 @@ class MusicPlayerViewModel(
                 errorMessage = null
             )
 
-            if (song.previewUrl.isBlank()) {
+            // If song has no YouTube ID and no preview URL, try to enrich it
+            var enrichedSong = song
+            if (song.youtubeVideoId.isEmpty() && song.previewUrl.isEmpty()) {
+                android.util.Log.w("MusicPlayer", "⚠️ Song has no audio URLs, attempting to enrich: ${song.name}")
+                enrichedSong = songRepository.enrichSongIfNeeded(song)
+                if (enrichedSong.youtubeVideoId.isNotEmpty() || enrichedSong.previewUrl.isNotEmpty()) {
+                    android.util.Log.d("MusicPlayer", "✅ Successfully enriched song: ${enrichedSong.name}")
+                    // Update player state with enriched song
+                    _playerState.value = _playerState.value.copy(currentSong = enrichedSong)
+                } else {
+                    android.util.Log.e("MusicPlayer", "❌ Failed to enrich song: ${song.name}")
+                }
+            } else if (song.youtubeVideoId.isEmpty() || song.previewUrl.isEmpty()) {
+                // Try to enrich if missing either YouTube ID or preview URL
+                android.util.Log.d("MusicPlayer", "Enriching song to get missing data: ${song.name}")
+                enrichedSong = songRepository.enrichSongIfNeeded(song)
+                if (enrichedSong.youtubeVideoId != song.youtubeVideoId || enrichedSong.previewUrl != song.previewUrl) {
+                    _playerState.value = _playerState.value.copy(currentSong = enrichedSong)
+                }
+            }
+
+            // Determine audio URL: prefer YouTube if available, fallback to Spotify preview
+            val audioUrl = if (enrichedSong.youtubeVideoId.isNotEmpty()) {
+                // Validate YouTube video ID before attempting extraction
+                if (!isValidYouTubeVideoId(enrichedSong.youtubeVideoId)) {
+                    android.util.Log.w("MusicPlayer", "⚠️ Invalid YouTube video ID format: ${enrichedSong.youtubeVideoId}, falling back to Spotify preview")
+                    // Invalid video ID, try Spotify preview
+                    if (enrichedSong.previewUrl.isNotBlank()) {
+                        android.util.Log.d("MusicPlayer", "Using Spotify 30-second preview (invalid YouTube ID)")
+                        enrichedSong.previewUrl
+                    } else {
+                        android.util.Log.e("MusicPlayer", "❌ No audio available - invalid YouTube ID and no Spotify preview")
+                        _playerState.value = _playerState.value.copy(
+                            duration = if (enrichedSong.duration > 0) enrichedSong.duration else 0,
+                            currentPosition = 0,
+                            isPlaying = false,
+                            errorMessage = "No audio available. Try searching for this song again."
+                        )
+                        return@launch
+                    }
+                } else {
+                    android.util.Log.d("MusicPlayer", "🎵 Attempting YouTube audio extraction for: ${enrichedSong.name}")
+                    android.util.Log.d("MusicPlayer", "   Video ID: ${enrichedSong.youtubeVideoId}")
+                    
+                    // Try to get YouTube audio stream from backend
+                    val youtubeUrl = lt.viko.eif.mtrimaitis.Slingo.data.YouTubeAudioExtractor.getAudioStreamUrl(enrichedSong.youtubeVideoId)
+                    
+                    if (youtubeUrl != null && youtubeUrl.isNotBlank() && 
+                        !youtubeUrl.startsWith("https://www.youtube.com/watch") && 
+                        !youtubeUrl.startsWith("https://www.youtube.com/embed") &&
+                        youtubeUrl.startsWith("http")) {
+                        android.util.Log.d("MusicPlayer", "✅ Success! Using YouTube audio stream from backend")
+                        youtubeUrl // Got actual audio stream URL from backend
+                    } else {
+                        // YouTube extraction failed, fallback to Spotify preview
+                        android.util.Log.w("MusicPlayer", "⚠️ YouTube extraction failed, falling back to Spotify preview")
+                        if (enrichedSong.previewUrl.isNotBlank()) {
+                            android.util.Log.d("MusicPlayer", "Using Spotify 30-second preview as fallback")
+                            enrichedSong.previewUrl
+                        } else {
+                            android.util.Log.e("MusicPlayer", "❌ No audio available - no YouTube URL and no Spotify preview")
+                            _playerState.value = _playerState.value.copy(
+                                duration = if (enrichedSong.duration > 0) enrichedSong.duration else 0,
+                                currentPosition = 0,
+                                isPlaying = false,
+                                errorMessage = "Audio not available. Check backend server and try again."
+                            )
+                            return@launch
+                        }
+                    }
+                }
+            } else if (enrichedSong.previewUrl.isNotBlank()) {
+                android.util.Log.d("MusicPlayer", "Using Spotify preview for: ${enrichedSong.name} (no YouTube ID)")
+                enrichedSong.previewUrl // Use Spotify preview
+            } else {
+                android.util.Log.e("MusicPlayer", "❌ Song has no audio URL: ${enrichedSong.name}")
+                android.util.Log.e("MusicPlayer", "   YouTube ID: ${enrichedSong.youtubeVideoId}")
+                android.util.Log.e("MusicPlayer", "   Preview URL: ${enrichedSong.previewUrl}")
                 _playerState.value = _playerState.value.copy(
-                    duration = if (song.duration > 0) song.duration else 0,
+                    duration = if (enrichedSong.duration > 0) enrichedSong.duration else 0,
                     currentPosition = 0,
                     isPlaying = false,
-                    errorMessage = null
+                    errorMessage = "No audio available for this track. Try searching for it first."
                 )
-                android.util.Log.w("MusicPlayer", "Song has no preview URL: ${song.name}")
                 return@launch
             }
+            
+            android.util.Log.d("MusicPlayer", "🎶 Final audio URL: ${audioUrl.take(100)}...") // Log first 100 chars
 
             try {
                 val audioFocusGranted = requestAudioFocus()
@@ -90,51 +169,64 @@ class MusicPlayerViewModel(
                         setAudioStreamType(AudioManager.STREAM_MUSIC)
                     }
 
+                    // Store context reference for use in retry logic
+                    val playbackContext = this@MusicPlayerViewModel.context
+                    
                     try {
-                        val mediaUri = Uri.parse(song.previewUrl)
-                        val playbackContext = this@MusicPlayerViewModel.context
+                        val mediaUri = Uri.parse(audioUrl)
                         if (playbackContext != null) {
                             setDataSource(playbackContext, mediaUri)
                         } else {
-                            setDataSource(song.previewUrl)
+                            setDataSource(audioUrl)
                         }
+                        android.util.Log.d("MusicPlayer", "Loading audio from: $audioUrl")
                     } catch (e: Exception) {
-                        android.util.Log.e("MusicPlayer", "Invalid media URI: ${song.previewUrl}", e)
+                        android.util.Log.e("MusicPlayer", "Invalid media URI: $audioUrl", e)
                         _playerState.value = _playerState.value.copy(
-                            errorMessage = "Song preview is unavailable."
+                            errorMessage = "Could not load audio. Check your connection."
                         )
                         return@launch
                     }
                     setOnPreparedListener { mp ->
                         android.util.Log.d("MusicPlayer", "MediaPlayer prepared, duration: ${mp.duration}ms")
-                        val durationSeconds = if (mp.duration > 0) mp.duration / 1000 else 0
+                        val durationSeconds = if (mp.duration > 0) mp.duration / 1000 else enrichedSong.duration
                         viewModelScope.launch {
                             _playerState.value = _playerState.value.copy(
                                 duration = durationSeconds,
-                                currentPosition = 0
+                                currentPosition = 0,
+                                errorMessage = null // Clear any previous errors
                             )
 
+                            // Always try to play if autoPlay is true
                             if (autoPlay) {
                                 try {
-                                    if (mp.duration > 0) {
-                                        mp.start()
-                                        android.util.Log.d("MusicPlayer", "MediaPlayer started automatically")
-                                        startPositionUpdates()
-                                        _playerState.value = _playerState.value.copy(isPlaying = true)
-                                    } else {
-                                        android.util.Log.w("MusicPlayer", "Invalid duration, cannot play")
-                                    }
+                                    mp.start()
+                                    android.util.Log.d("MusicPlayer", "MediaPlayer started - playing: ${enrichedSong.name}")
+                                    startPositionUpdates()
+                                    _playerState.value = _playerState.value.copy(isPlaying = true)
                                 } catch (e: IllegalStateException) {
                                     android.util.Log.e("MusicPlayer", "IllegalStateException starting playback: ${e.message}", e)
-                                    mp.reset()
+                                    // Retry once
                                     try {
-                                        mp.setDataSource(song.previewUrl)
+                                        mp.reset()
+                                        val retryUri = Uri.parse(audioUrl)
+                                        if (playbackContext != null) {
+                                            mp.setDataSource(playbackContext, retryUri)
+                                        } else {
+                                            mp.setDataSource(audioUrl)
+                                        }
                                         mp.prepareAsync()
                                     } catch (ex: Exception) {
                                         android.util.Log.e("MusicPlayer", "Error retrying: ${ex.message}", ex)
+                                        _playerState.value = _playerState.value.copy(
+                                            errorMessage = "Playback failed. Please try again."
+                                        )
                                     }
                                 } catch (e: Exception) {
                                     android.util.Log.e("MusicPlayer", "Error starting playback: ${e.message}", e)
+                                    _playerState.value = _playerState.value.copy(
+                                        errorMessage = "Could not start playback: ${e.message}"
+                                    )
                                 }
                             }
                         }
@@ -160,7 +252,7 @@ class MusicPlayerViewModel(
                         playNext()
                     }
                     prepareAsync()
-                    android.util.Log.d("MusicPlayer", "Preparing MediaPlayer with URL: ${song.previewUrl}")
+                    android.util.Log.d("MusicPlayer", "Preparing MediaPlayer with URL: $audioUrl")
                 }
             } catch (e: IOException) {
                 android.util.Log.e("MusicPlayer", "IOException loading song: ${e.message}", e)
@@ -232,10 +324,10 @@ class MusicPlayerViewModel(
             }
         } ?: run {
             android.util.Log.d("MusicPlayer", "No media player, loading song")
-            if (currentSong.previewUrl.isNotEmpty()) {
+            if (currentSong.previewUrl.isNotEmpty() || currentSong.youtubeVideoId.isNotEmpty()) {
                 loadSong(currentSong, autoPlay = true)
             } else {
-                android.util.Log.w("MusicPlayer", "No preview URL available")
+                android.util.Log.w("MusicPlayer", "No audio URL available")
             }
         }
     }
@@ -389,6 +481,24 @@ class MusicPlayerViewModel(
     override fun onCleared() {
         super.onCleared()
         stopPlayback()
+    }
+    
+    /**
+     * Validates if a string is a valid YouTube video ID.
+     * YouTube video IDs are exactly 11 characters and contain alphanumeric characters, hyphens, and underscores.
+     */
+    private fun isValidYouTubeVideoId(videoId: String): Boolean {
+        if (videoId.length != 11) {
+            android.util.Log.w("MusicPlayer", "Invalid YouTube video ID length: ${videoId.length} (expected 11): $videoId")
+            return false
+        }
+        // YouTube video IDs contain: A-Z, a-z, 0-9, -, _
+        val pattern = Pattern.compile("^[a-zA-Z0-9_-]{11}$")
+        val isValid = pattern.matcher(videoId).matches()
+        if (!isValid) {
+            android.util.Log.w("MusicPlayer", "Invalid YouTube video ID format: $videoId")
+        }
+        return isValid
     }
 }
 

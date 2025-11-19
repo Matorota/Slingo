@@ -11,6 +11,8 @@ object RetrofitClient {
 
     private const val SPOTIFY_CLIENT_SECRET = "656e6c7ec8fc4d25ae4cc783e5154cd5"
     
+    private const val YOUTUBE_API_KEY = "AIzaSyAZa8067rvi3SnLwE9rNTampM9NLbrLGdw"
+    
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -28,9 +30,19 @@ object RetrofitClient {
         .build()
         .create(SpotifyApi::class.java)
 
+    val youtubeApi: YouTubeApi = Retrofit.Builder()
+        .baseUrl("https://www.googleapis.com/youtube/v3/")
+        .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+        .create(YouTubeApi::class.java)
+
     fun getSpotifyClientId(): String = SPOTIFY_CLIENT_ID
 
     fun getSpotifyClientSecret(): String = SPOTIFY_CLIENT_SECRET
+    
+    fun getYouTubeApiKey(): String = YOUTUBE_API_KEY
+    
     fun getBasicAuthHeader(): String {
         val credentials = "$SPOTIFY_CLIENT_ID:$SPOTIFY_CLIENT_SECRET"
         return "Basic ${android.util.Base64.encodeToString(credentials.toByteArray(), android.util.Base64.NO_WRAP)}"

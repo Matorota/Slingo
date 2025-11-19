@@ -94,5 +94,9 @@ dependencies {
     
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+    
+    // YouTube audio extraction - using a simpler approach
+    // NewPipeExtractor removed due to dependency issues
+    // We'll use a direct HTTP approach instead
 
 }

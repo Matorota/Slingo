@@ -13,7 +13,7 @@ import lt.viko.eif.mtrimaitis.Slingo.data.models.User
 
 @Database(
     entities = [User::class, Song::class, Playlist::class, PlaylistSong::class, lt.viko.eif.mtrimaitis.Slingo.data.models.FavoriteSong::class],
-    version = 2,
+    version = 3, // Updated to support YouTube fields in Song model
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
