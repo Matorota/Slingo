@@ -31,6 +31,8 @@ fun LibraryScreen(
     val uiState by playlistViewModel.uiState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var showDeletePlaylistDialog by remember { mutableStateOf(false) }
+    var playlistToDelete by remember { mutableStateOf<lt.viko.eif.mtrimaitis.Slingo.data.models.Playlist?>(null) }
     var newPlaylistName by remember { mutableStateOf("") }
     var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
     
@@ -131,6 +133,12 @@ fun LibraryScreen(
                     }) {
                         Icon(Icons.Filled.PlayArrow, contentDescription = "View Playlist", tint = Color.White)
                     }
+                    IconButton(onClick = { 
+                        playlistToDelete = playlist
+                        showDeletePlaylistDialog = true
+                    }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete Playlist", tint = Color(0xFFE53935))
+                    }
                 }
             }
             
@@ -226,6 +234,53 @@ fun LibraryScreen(
             dismissButton = {
                 TextButton(onClick = { showCreatePlaylistDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeletePlaylistDialog && playlistToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                showDeletePlaylistDialog = false
+                playlistToDelete = null
+            },
+            containerColor = Color(0xFF1F1D2B),
+            title = { 
+                Text("Delete Playlist", color = Color.White) 
+            },
+            text = {
+                Text(
+                    "Are you sure you want to delete \"${playlistToDelete?.name}\"? This action cannot be undone.",
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        playlistToDelete?.let { playlist ->
+                            playlistViewModel.deletePlaylist(playlist)
+                            if (selectedPlaylistId == playlist.id) {
+                                selectedPlaylistId = -1L
+                            }
+                        }
+                        showDeletePlaylistDialog = false
+                        playlistToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE53935),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showDeletePlaylistDialog = false
+                    playlistToDelete = null
+                }) {
+                    Text("Cancel", color = Color.White)
                 }
             }
         )

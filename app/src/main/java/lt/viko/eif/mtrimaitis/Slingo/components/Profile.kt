@@ -483,13 +483,85 @@ private fun SettingsSection(
     onDarkModeChanged: (Boolean) -> Unit,
     onDataSaverChanged: (Boolean) -> Unit
 ) {
+    var selectedSettingsTab by remember { mutableStateOf(SettingsTab.General) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TabRow(
+            selectedTabIndex = selectedSettingsTab.ordinal,
+            containerColor = Color.White.copy(alpha = 0.05f),
+            contentColor = Color.White,
+            indicator = {}
+        ) {
+            SettingsTab.values().forEach { tab ->
+                Tab(
+                    selected = selectedSettingsTab == tab,
+                    onClick = { selectedSettingsTab = tab },
+                    text = {
+                        Text(
+                            text = tab.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selectedSettingsTab == tab) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                )
+            }
+        }
+
+        AnimatedContent(
+            targetState = selectedSettingsTab,
+            label = "settingsContent"
+        ) { tab ->
+            when (tab) {
+                SettingsTab.General -> GeneralSettingsTab(
+                    notificationsEnabled = notificationsEnabled,
+                    darkModeEnabled = darkModeEnabled,
+                    dataSaverEnabled = dataSaverEnabled,
+                    onNotificationsChanged = onNotificationsChanged,
+                    onDarkModeChanged = onDarkModeChanged,
+                    onDataSaverChanged = onDataSaverChanged
+                )
+                SettingsTab.Database -> DatabaseSettingsTab()
+                SettingsTab.About -> AboutTab()
+            }
+        }
+    }
+}
+
+private enum class SettingsTab(val title: String) {
+    General("General"),
+    Database("Database"),
+    About("About")
+}
+
+@Composable
+private fun GeneralSettingsTab(
+    notificationsEnabled: Boolean,
+    darkModeEnabled: Boolean,
+    dataSaverEnabled: Boolean,
+    onNotificationsChanged: (Boolean) -> Unit,
+    onDarkModeChanged: (Boolean) -> Unit,
+    onDataSaverChanged: (Boolean) -> Unit
+) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("App preferences", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("App Preferences", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                color = Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "These settings are placeholders for now",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             SettingToggleRow(
                 icon = Icons.Filled.Notifications,
                 title = "Push notifications",
@@ -515,8 +587,13 @@ private fun SettingsSection(
             )
         }
     }
+}
 
-    // Database Info Card
+@Composable
+private fun DatabaseSettingsTab() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dbPath = context.getDatabasePath("slingo_database").absolutePath
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
@@ -524,19 +601,56 @@ private fun SettingsSection(
         Column(modifier = Modifier.padding(20.dp)) {
             Text("Database Information", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(modifier = Modifier.height(12.dp))
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val dbPath = context.getDatabasePath("slingo_database").absolutePath
             InfoRow(
                 icon = Icons.Filled.Lock,
                 label = "Database Location",
                 value = dbPath
             )
             Divider(color = Color.White.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "To view database data:\n1. Enable USB debugging\n2. Use Android Studio Database Inspector\n3. Or use adb: adb shell run-as lt.viko.eif.mtrimaitis.Slingo cat databases/slingo_database",
+                "How to view database data:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "1. Enable USB debugging on your device\n" +
+                "2. Use Android Studio Database Inspector:\n" +
+                "   - View > Tool Windows > App Inspection\n" +
+                "   - Select your device and app\n" +
+                "   - Open Database Inspector\n" +
+                "3. Or use ADB command:\n" +
+                "   adb shell run-as lt.viko.eif.mtrimaitis.Slingo cat databases/slingo_database",
                 color = Color.White.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutTab() {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text("About", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(modifier = Modifier.height(12.dp))
+            InfoRow(
+                icon = Icons.Filled.Person,
+                label = "Developer",
+                value = "Matas Štrimaitis"
+            )
+            Divider(color = Color.White.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Slingo is a music streaming application built with Jetpack Compose and Room database. " +
+                "It allows users to discover music, create playlists, manage favorites, and share playlists with friends.",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
@@ -730,6 +844,8 @@ private fun FriendsSection(
     var selectedFriendId by remember { mutableLongStateOf(-1L) }
     var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
     var selectedUserId by remember { mutableLongStateOf(-1L) }
+    var showUnfriendDialog by remember { mutableStateOf(false) }
+    var friendToUnfriend by remember { mutableStateOf<User?>(null) }
     var friendPlaylists by remember { mutableStateOf<List<lt.viko.eif.mtrimaitis.Slingo.data.models.Playlist>>(emptyList()) }
 
     LaunchedEffect(searchQuery) {
@@ -855,6 +971,10 @@ private fun FriendsSection(
                             onSharePlaylist = {
                                 selectedUserId = friend.id
                                 showSharePlaylistDialog = true
+                            },
+                            onUnfriend = {
+                                friendToUnfriend = friend
+                                showUnfriendDialog = true
                             }
                         )
                         if (friend != friendUiState.friends.last()) {
@@ -909,6 +1029,23 @@ private fun FriendsSection(
             friendName = friendUiState.friends.find { it.id == selectedFriendId }?.username ?: "Friend",
             playlists = friendPlaylists,
             onDismiss = { showFriendPlaylistsDialog = false }
+        )
+    }
+
+    if (showUnfriendDialog && friendToUnfriend != null) {
+        UnfriendConfirmationDialog(
+            friendName = friendToUnfriend!!.username,
+            onConfirm = {
+                friendToUnfriend?.let { friend ->
+                    friendViewModel.removeFriend(friend.id)
+                }
+                showUnfriendDialog = false
+                friendToUnfriend = null
+            },
+            onDismiss = {
+                showUnfriendDialog = false
+                friendToUnfriend = null
+            }
         )
     }
 }
@@ -1040,7 +1177,8 @@ private fun SharedPlaylistRequestRow(
 private fun FriendRow(
     friend: User,
     onSharePlaylist: () -> Unit,
-    onViewPlaylists: () -> Unit
+    onViewPlaylists: () -> Unit,
+    onUnfriend: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -1064,6 +1202,9 @@ private fun FriendRow(
         }
         IconButton(onClick = onSharePlaylist) {
             Icon(Icons.Filled.Share, contentDescription = "Share Playlist", tint = Color.White)
+        }
+        IconButton(onClick = onUnfriend) {
+            Icon(Icons.Filled.Close, contentDescription = "Unfriend", tint = Color(0xFFE53935))
         }
     }
 }
@@ -1209,6 +1350,47 @@ private fun FriendPlaylistsDialog(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun UnfriendConfirmationDialog(
+    friendName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1F1D2B),
+        tonalElevation = 8.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text("Unfriend", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        },
+        text = {
+            Text(
+                "Are you sure you want to unfriend $friendName?",
+                color = Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE53935),
+                    contentColor = Color.White
+                )
+            ) {
+                Text("Unfriend")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White)
             }
         }
     )

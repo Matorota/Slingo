@@ -196,6 +196,13 @@ class FriendViewModel(
         }
     }
 
+    fun removeFriend(friendId: Long) {
+        viewModelScope.launch {
+            friendRepository.removeFriend(currentUserId, friendId)
+            loadFriendships()
+        }
+    }
+
     suspend fun getUserById(userId: Long): User? {
         return userDao.getUserById(userId).first()
     }
