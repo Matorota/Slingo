@@ -28,7 +28,7 @@ import lt.viko.eif.mtrimaitis.Slingo.data.models.User
         Friendship::class,
         SharedPlaylist::class
     ],
-    version = 4, // Updated to support friends and shared playlists
+    version = 5, // Updated to support profile images
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

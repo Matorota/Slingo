@@ -88,6 +88,34 @@ class LoginRepository(private val userDao: UserDao) {
         }
     }
 
+    suspend fun updateUsername(userId: Long, newUsername: String): Result<Unit> {
+        return try {
+            val user = userDao.getUserById(userId).first()
+            if (user == null) {
+                return Result.failure(Exception("User not found"))
+            }
+            val updatedUser = user.copy(username = newUsername)
+            userDao.updateUser(updatedUser)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateProfileImage(userId: Long, imagePath: String?): Result<Unit> {
+        return try {
+            val user = userDao.getUserById(userId).first()
+            if (user == null) {
+                return Result.failure(Exception("User not found"))
+            }
+            val updatedUser = user.copy(profileImagePath = imagePath)
+            userDao.updateUser(updatedUser)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun hashPassword(password: String): String {
         val bytes = password.toByteArray()
         val md = MessageDigest.getInstance("SHA-256")

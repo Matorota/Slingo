@@ -75,8 +75,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.flow.first
+import coil.compose.AsyncImage
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
+import java.io.FileOutputStream
 import lt.viko.eif.mtrimaitis.Slingo.data.models.FriendRequest
 import lt.viko.eif.mtrimaitis.Slingo.data.models.SharedPlaylist
 import lt.viko.eif.mtrimaitis.Slingo.data.models.User
@@ -98,7 +106,7 @@ fun ProfileScreen(
     val playlistUiState by playlistViewModel.uiState.collectAsState()
     val favoriteUiState by favoriteViewModel.uiState.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(ProfileTab.Overview) }
+    var selectedTab by remember { mutableStateOf(ProfileTab.User) }
     val scrollState = rememberScrollState()
 
     var showPasswordDialog by remember { mutableStateOf(false) }
@@ -122,6 +130,7 @@ fun ProfileScreen(
         ProfileHeader(
             username = authUiState.currentUser?.username ?: "Guest",
             email = authUiState.currentUser?.email ?: "Add an email",
+            profileImagePath = authUiState.currentUser?.profileImagePath,
             playlistCount = playlistUiState.playlists.size,
             favoritesCount = favoriteUiState.favoriteSongs.size
         )
@@ -156,11 +165,11 @@ fun ProfileScreen(
             label = "profileSection"
         ) { tab ->
             when (tab) {
-                ProfileTab.Overview -> ProfileOverviewSection(
-                    username = authUiState.currentUser?.username ?: "Guest",
-                    email = authUiState.currentUser?.email ?: "Add an email",
-                    playlistCount = playlistUiState.playlists.size,
-                    favoritesCount = favoriteUiState.favoriteSongs.size
+                ProfileTab.User -> UserSection(
+                    authViewModel = authViewModel,
+                    currentUser = authUiState.currentUser,
+                    isLoading = authUiState.isLoading,
+                    errorMessage = authUiState.errorMessage
                 )
 
                 ProfileTab.Friends -> FriendsSection(
@@ -180,25 +189,6 @@ fun ProfileScreen(
         }
 
         Spacer(modifier = Modifier.height(28.dp))
-
-        Button(
-            onClick = {
-                passwordStep = PasswordChangeStep.VerifyCurrent
-                currentPassword = ""
-                newPassword = ""
-                confirmNewPassword = ""
-                verifiedPassword = null
-                authViewModel.clearError()
-                showPasswordDialog = true
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text("Change password")
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = { showLogoutDialog = true },
@@ -321,6 +311,7 @@ private fun LogoutConfirmationDialog(
 private fun ProfileHeader(
     username: String,
     email: String,
+    profileImagePath: String?,
     playlistCount: Int,
     favoritesCount: Int
 ) {
@@ -352,12 +343,23 @@ private fun ProfileHeader(
                         .background(Color.White.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Person,
-                        contentDescription = "Profile",
-                        tint = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.size(48.dp)
-                    )
+                    if (profileImagePath != null && File(profileImagePath).exists()) {
+                        AsyncImage(
+                            model = Uri.fromFile(File(profileImagePath)),
+                            contentDescription = "Profile",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = "Profile",
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
@@ -418,38 +420,299 @@ private fun RowScope.StatChip(icon: androidx.compose.ui.graphics.vector.ImageVec
 }
 
 @Composable
-private fun ProfileOverviewSection(
-    username: String,
-    email: String,
-    playlistCount: Int,
-    favoritesCount: Int
+private fun UserSection(
+    authViewModel: AuthViewModel,
+    currentUser: User?,
+    isLoading: Boolean,
+    errorMessage: String?
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var showImageSuccessDialog by remember { mutableStateOf(false) }
+    var showUsernameSuccessDialog by remember { mutableStateOf(false) }
+    var imageSuccessMessage by remember { mutableStateOf("") }
+    var passwordStep by remember { mutableStateOf(PasswordChangeStep.VerifyCurrent) }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
+    var verifiedPassword by remember { mutableStateOf<String?>(null) }
+    var newUsername by remember { mutableStateOf("") }
+    val hasExistingImage = remember(currentUser?.profileImagePath) {
+        currentUser?.profileImagePath != null && File(currentUser.profileImagePath).exists()
+    }
+    
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val file = File(context.filesDir, "profile_${currentUser?.id}.jpg")
+                val outputStream = FileOutputStream(file)
+                inputStream?.use { input ->
+                    outputStream.use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val isFirstTime = !hasExistingImage
+                authViewModel.updateProfileImage(file.absolutePath) {
+                    imageSuccessMessage = if (isFirstTime) "Image added" else "Image changed"
+                    showImageSuccessDialog = true
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Account Information Section
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Account summary", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Account Information", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 Spacer(modifier = Modifier.height(12.dp))
-                InfoRow(icon = Icons.Filled.Person, label = "Username", value = username)
+                Button(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text(if (hasExistingImage) "Change Profile Image" else "Add Profile Image")
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 Divider(color = Color.White.copy(alpha = 0.1f))
-                InfoRow(icon = Icons.Filled.Email, label = "Email", value = email)
+                Spacer(modifier = Modifier.height(12.dp))
+                InfoRow(icon = Icons.Filled.Person, label = "Username", value = currentUser?.username ?: "Guest")
+                Divider(color = Color.White.copy(alpha = 0.1f))
+                InfoRow(icon = Icons.Filled.Email, label = "Email", value = currentUser?.email ?: "Add an email")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        newUsername = currentUser?.username ?: ""
+                        showNameDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Change Username")
+                }
             }
         }
 
+        // Password Section
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Listening stats", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Password", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 Spacer(modifier = Modifier.height(12.dp))
-                InfoRow(icon = Icons.Filled.PlaylistPlay, label = "Playlists", value = "$playlistCount created")
-                Divider(color = Color.White.copy(alpha = 0.1f))
-                InfoRow(icon = Icons.Filled.Favorite, label = "Favorites", value = "$favoritesCount saved")
+                Button(
+                    onClick = {
+                        passwordStep = PasswordChangeStep.VerifyCurrent
+                        currentPassword = ""
+                        newPassword = ""
+                        confirmNewPassword = ""
+                        verifiedPassword = null
+                        authViewModel.clearError()
+                        showPasswordDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Change Password")
+                }
             }
         }
+
+        if (errorMessage != null) {
+            Surface(
+                color = Color(0xFFFFB4A9).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = errorMessage,
+                    color = Color(0xFFFFB4A9),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+    }
+
+    // Image Success Dialog
+    if (showImageSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { showImageSuccessDialog = false },
+            containerColor = Color(0xFF1F1D2B),
+            tonalElevation = 8.dp,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text("Success", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            },
+            text = {
+                Text(
+                    imageSuccessMessage,
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showImageSuccessDialog = false },
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Username Success Dialog
+    if (showUsernameSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { showUsernameSuccessDialog = false },
+            containerColor = Color(0xFF1F1D2B),
+            tonalElevation = 8.dp,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text("Success", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            },
+            text = {
+                Text(
+                    "Username changed successfully",
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showUsernameSuccessDialog = false },
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Name Change Dialog
+    if (showNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            containerColor = Color(0xFF1F1D2B),
+            tonalElevation = 8.dp,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text("Change Username", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newUsername,
+                        onValueChange = { newUsername = it },
+                        label = { Text("New Username", color = Color.White) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                            cursorColor = Color.White
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newUsername.isNotBlank()) {
+                            authViewModel.updateUsername(newUsername) {
+                                showNameDialog = false
+                                showUsernameSuccessDialog = true
+                            }
+                        }
+                    },
+                    enabled = !isLoading && newUsername.isNotBlank(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Save")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) {
+                    Text("Cancel", color = Color.White)
+                }
+            }
+        )
+    }
+
+    // Password Change Dialog
+    if (showPasswordDialog) {
+        PasswordChangeDialog(
+            step = passwordStep,
+            isLoading = isLoading,
+            errorMessage = errorMessage,
+            currentPassword = currentPassword,
+            newPassword = newPassword,
+            confirmPassword = confirmNewPassword,
+            onDismiss = {
+                showPasswordDialog = false
+                passwordStep = PasswordChangeStep.VerifyCurrent
+                currentPassword = ""
+                newPassword = ""
+                confirmNewPassword = ""
+                verifiedPassword = null
+                authViewModel.clearError()
+            },
+            onBack = {
+                passwordStep = PasswordChangeStep.VerifyCurrent
+                newPassword = ""
+                confirmNewPassword = ""
+                authViewModel.clearError()
+            },
+            onCurrentPasswordChange = { currentPassword = it },
+            onNewPasswordChange = { newPassword = it },
+            onConfirmPasswordChange = { confirmNewPassword = it },
+            onVerifyCurrent = {
+                authViewModel.verifyCurrentPassword(currentPassword) { verified ->
+                    if (verified) {
+                        verifiedPassword = currentPassword
+                        passwordStep = PasswordChangeStep.EnterNew
+                        currentPassword = ""
+                        authViewModel.clearError()
+                    }
+                }
+            },
+            onSubmitNewPassword = {
+                val previousPassword = verifiedPassword ?: return@PasswordChangeDialog
+                authViewModel.changePassword(previousPassword, newPassword) {
+                    showPasswordDialog = false
+                    passwordStep = PasswordChangeStep.VerifyCurrent
+                    currentPassword = ""
+                    newPassword = ""
+                    confirmNewPassword = ""
+                    verifiedPassword = null
+                    authViewModel.clearError()
+                }
+            }
+        )
     }
 }
 
@@ -1067,12 +1330,31 @@ private fun UserSearchResultRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Filled.Person,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (user.profileImagePath != null && File(user.profileImagePath).exists()) {
+                    AsyncImage(
+                        model = Uri.fromFile(File(user.profileImagePath)),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(user.username, color = Color.White, style = MaterialTheme.typography.bodyMedium)
@@ -1109,12 +1391,31 @@ private fun FriendRequestRow(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Filled.Group,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.size(24.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (fromUser?.profileImagePath != null && File(fromUser!!.profileImagePath).exists()) {
+                AsyncImage(
+                    model = Uri.fromFile(File(fromUser!!.profileImagePath)),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Group,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text("Friend request", color = Color.White, style = MaterialTheme.typography.bodyMedium)
@@ -1186,12 +1487,31 @@ private fun FriendRow(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Filled.Person,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.size(24.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (friend.profileImagePath != null && File(friend.profileImagePath).exists()) {
+                AsyncImage(
+                    model = Uri.fromFile(File(friend.profileImagePath)),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(friend.username, color = Color.White, style = MaterialTheme.typography.bodyMedium)
@@ -1285,7 +1605,7 @@ private fun SharePlaylistDialog(
 }
 
 private enum class ProfileTab(val title: String) {
-    Overview("Overview"),
+    User("User"),
     Friends("Friends"),
     Settings("Settings")
 }
