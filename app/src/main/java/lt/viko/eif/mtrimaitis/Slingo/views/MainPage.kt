@@ -32,6 +32,7 @@ import lt.viko.eif.mtrimaitis.Slingo.components.NowPlayingScreen
 import lt.viko.eif.mtrimaitis.Slingo.components.ProfileScreen
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.DiscoverViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FriendViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.MusicPlayerViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
 // The app now builds without needing Spotify’s Maven repo (only 30‑second previews are playable, due to the API limitation).
@@ -42,6 +43,8 @@ fun MainContentScreen(
     songRepository: lt.viko.eif.mtrimaitis.Slingo.data.SongRepository,
     playlistRepository: lt.viko.eif.mtrimaitis.Slingo.data.PlaylistRepository,
     favoriteRepository: lt.viko.eif.mtrimaitis.Slingo.data.FavoriteRepository,
+    friendRepository: lt.viko.eif.mtrimaitis.Slingo.data.FriendRepository,
+    sharedPlaylistRepository: lt.viko.eif.mtrimaitis.Slingo.data.SharedPlaylistRepository,
     authViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel,
     currentUserId: Long
 ) {
@@ -74,6 +77,15 @@ fun MainContentScreen(
     }
     val favoriteViewModel: lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel = viewModel {
         lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel(favoriteRepository)
+    }
+    val friendViewModel: FriendViewModel = viewModel {
+        val db = lt.viko.eif.mtrimaitis.Slingo.data.database.DatabaseProvider.getDatabase(context)
+        FriendViewModel(
+            friendRepository = friendRepository,
+            sharedPlaylistRepository = sharedPlaylistRepository,
+            userDao = db.userDao(),
+            currentUserId = currentUserId
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize().background(gradientBrush)) {
@@ -132,6 +144,7 @@ fun MainContentScreen(
                         authViewModel = authViewModel,
                         playlistViewModel = playlistViewModel,
                         favoriteViewModel = favoriteViewModel,
+                        friendViewModel = friendViewModel,
                         onLogout = {
                             // Navigate back to welcome screen
                             navController.navigate("welcome") {

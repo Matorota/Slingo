@@ -9,6 +9,11 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
     // fill the 3 api keys SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, YOUTUBE_API_KEY
 
+    private const val SPOTIFY_CLIENT_ID = "dcea1cbdd55d4c46b738d00caddac5b5"
+
+    private const val SPOTIFY_CLIENT_SECRET = "656e6c7ec8fc4d25ae4cc783e5154cd5"
+
+    private const val YOUTUBE_API_KEY = "AIzaSyAZa8067rvi3SnLwE9rNTampM9NLbrLGdw"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY

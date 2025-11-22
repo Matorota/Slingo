@@ -26,8 +26,17 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,8 +45,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -45,12 +56,16 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,8 +76,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.flow.first
+import lt.viko.eif.mtrimaitis.Slingo.data.models.FriendRequest
+import lt.viko.eif.mtrimaitis.Slingo.data.models.SharedPlaylist
+import lt.viko.eif.mtrimaitis.Slingo.data.models.User
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FavoriteViewModel
+import lt.viko.eif.mtrimaitis.Slingo.viewmodel.FriendViewModel
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.PlaylistViewModel
 
 @Composable
@@ -71,6 +91,7 @@ fun ProfileScreen(
     authViewModel: AuthViewModel,
     playlistViewModel: PlaylistViewModel,
     favoriteViewModel: FavoriteViewModel,
+    friendViewModel: FriendViewModel,
     onLogout: () -> Unit
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
@@ -90,6 +111,7 @@ fun ProfileScreen(
     var notificationsEnabled by rememberSaveable { mutableStateOf(true) }
     var darkModeEnabled by rememberSaveable { mutableStateOf(true) }
     var dataSaverEnabled by rememberSaveable { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -141,6 +163,11 @@ fun ProfileScreen(
                     favoritesCount = favoriteUiState.favoriteSongs.size
                 )
 
+                ProfileTab.Friends -> FriendsSection(
+                    friendViewModel = friendViewModel,
+                    playlistViewModel = playlistViewModel
+                )
+
                 ProfileTab.Settings -> SettingsSection(
                     notificationsEnabled = notificationsEnabled,
                     darkModeEnabled = darkModeEnabled,
@@ -174,10 +201,7 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Button(
-            onClick = {
-                authViewModel.logout()
-                onLogout()
-            },
+            onClick = { showLogoutDialog = true },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
@@ -240,6 +264,57 @@ fun ProfileScreen(
             }
         )
     }
+
+    if (showLogoutDialog) {
+        LogoutConfirmationDialog(
+            onConfirm = {
+                authViewModel.logout()
+                onLogout()
+                showLogoutDialog = false
+            },
+            onDismiss = { showLogoutDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun LogoutConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1F1D2B),
+        tonalElevation = 8.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text("Confirm Logout", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        },
+        text = {
+            Text(
+                "Are you sure you want to log out?",
+                color = Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE53935),
+                    contentColor = Color.White
+                )
+            ) {
+                Text("Log out")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White)
+            }
+        }
+    )
 }
 
 @Composable
@@ -440,6 +515,31 @@ private fun SettingsSection(
             )
         }
     }
+
+    // Database Info Card
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text("Database Information", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Spacer(modifier = Modifier.height(12.dp))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val dbPath = context.getDatabasePath("slingo_database").absolutePath
+            InfoRow(
+                icon = Icons.Filled.Lock,
+                label = "Database Location",
+                value = dbPath
+            )
+            Divider(color = Color.White.copy(alpha = 0.1f))
+            Text(
+                "To view database data:\n1. Enable USB debugging\n2. Use Android Studio Database Inspector\n3. Or use adb: adb shell run-as lt.viko.eif.mtrimaitis.Slingo cat databases/slingo_database",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -616,9 +716,502 @@ private fun PasswordChangeDialog(
     )
 }
 
+@Composable
+private fun FriendsSection(
+    friendViewModel: FriendViewModel,
+    playlistViewModel: PlaylistViewModel
+) {
+    val friendUiState by friendViewModel.uiState.collectAsState()
+    val playlistUiState by playlistViewModel.uiState.collectAsState()
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var showSharePlaylistDialog by remember { mutableStateOf(false) }
+    var showFriendPlaylistsDialog by remember { mutableStateOf(false) }
+    var selectedFriendId by remember { mutableLongStateOf(-1L) }
+    var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
+    var selectedUserId by remember { mutableLongStateOf(-1L) }
+    var friendPlaylists by remember { mutableStateOf<List<lt.viko.eif.mtrimaitis.Slingo.data.models.Playlist>>(emptyList()) }
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotBlank() || searchQuery.isEmpty()) {
+            friendViewModel.searchUsers(searchQuery)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Search Users
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("Search Users", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by username or email", color = Color.White.copy(alpha = 0.5f)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.7f)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        cursorColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                if (friendUiState.searchResults.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyColumn(
+                        modifier = Modifier.height(200.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(friendUiState.searchResults.size) { index ->
+                            val user = friendUiState.searchResults[index]
+                            UserSearchResultRow(
+                                user = user,
+                                onAddFriend = { friendViewModel.sendFriendRequest(user.id) },
+                                onSharePlaylist = {
+                                    selectedUserId = user.id
+                                    showSharePlaylistDialog = true
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Pending Friend Requests
+        if (friendUiState.pendingRequests.isNotEmpty()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Friend Requests", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    friendUiState.pendingRequests.forEach { request ->
+                        FriendRequestRow(
+                            request = request,
+                            friendViewModel = friendViewModel,
+                            onAccept = { friendViewModel.acceptFriendRequest(request.id) },
+                            onDecline = { friendViewModel.declineFriendRequest(request.id) }
+                        )
+                        if (request != friendUiState.pendingRequests.last()) {
+                            Divider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Pending Shared Playlists
+        if (friendUiState.pendingSharedPlaylists.isNotEmpty()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Shared Playlists", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    friendUiState.pendingSharedPlaylists.forEach { sharedPlaylist ->
+                        SharedPlaylistRequestRow(
+                            sharedPlaylist = sharedPlaylist,
+                            playlistViewModel = playlistViewModel,
+                            onAccept = { 
+                                friendViewModel.acceptSharedPlaylist(sharedPlaylist.id) {
+                                    playlistViewModel.loadPlaylists()
+                                }
+                            },
+                            onDecline = { friendViewModel.declineSharedPlaylist(sharedPlaylist.id) }
+                        )
+                        if (sharedPlaylist != friendUiState.pendingSharedPlaylists.last()) {
+                            Divider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Friends List
+        if (friendUiState.friends.isNotEmpty()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Your Friends", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    friendUiState.friends.forEach { friend ->
+                        FriendRow(
+                            friend = friend,
+                            onViewPlaylists = {
+                                selectedFriendId = friend.id
+                                showFriendPlaylistsDialog = true
+                            },
+                            onSharePlaylist = {
+                                selectedUserId = friend.id
+                                showSharePlaylistDialog = true
+                            }
+                        )
+                        if (friend != friendUiState.friends.last()) {
+                            Divider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (friendUiState.errorMessage != null) {
+            Surface(
+                color = Color(0xFFFFB4A9).copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = friendUiState.errorMessage ?: "",
+                    color = Color(0xFFFFB4A9),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+    }
+
+    // Share Playlist Dialog
+    if (showSharePlaylistDialog) {
+        SharePlaylistDialog(
+            playlists = playlistUiState.playlists,
+            onDismiss = { showSharePlaylistDialog = false },
+            onShare = { playlistId ->
+                friendViewModel.sharePlaylist(playlistId, selectedUserId)
+                showSharePlaylistDialog = false
+            }
+        )
+    }
+
+    // Friend Playlists Dialog
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(selectedFriendId) {
+        if (selectedFriendId > 0 && showFriendPlaylistsDialog) {
+            withContext(Dispatchers.IO) {
+                val db = lt.viko.eif.mtrimaitis.Slingo.data.database.DatabaseProvider.getDatabase(context)
+                friendPlaylists = db.playlistDao().getPlaylistsByUser(selectedFriendId).first()
+            }
+        }
+    }
+
+    if (showFriendPlaylistsDialog) {
+        FriendPlaylistsDialog(
+            friendName = friendUiState.friends.find { it.id == selectedFriendId }?.username ?: "Friend",
+            playlists = friendPlaylists,
+            onDismiss = { showFriendPlaylistsDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun UserSearchResultRow(
+    user: User,
+    onAddFriend: () -> Unit,
+    onSharePlaylist: () -> Unit
+) {
+    Surface(
+        color = Color.White.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.Person,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(user.username, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                Text(user.email, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = onAddFriend) {
+                Icon(Icons.Filled.Add, contentDescription = "Add Friend", tint = Color.White)
+            }
+            IconButton(onClick = onSharePlaylist) {
+                Icon(Icons.Filled.Share, contentDescription = "Share Playlist", tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendRequestRow(
+    request: FriendRequest,
+    friendViewModel: FriendViewModel,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    var fromUser by remember { mutableStateOf<User?>(null) }
+    
+    LaunchedEffect(request.fromUserId) {
+        withContext(Dispatchers.IO) {
+            fromUser = friendViewModel.getUserById(request.fromUserId)
+        }
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.Group,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Friend request", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                fromUser?.username ?: "User #${request.fromUserId}",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        IconButton(onClick = onAccept) {
+            Icon(Icons.Filled.Check, contentDescription = "Accept", tint = Color(0xFF4CAF50))
+        }
+        IconButton(onClick = onDecline) {
+            Icon(Icons.Filled.Close, contentDescription = "Decline", tint = Color(0xFFE53935))
+        }
+    }
+}
+
+@Composable
+private fun SharedPlaylistRequestRow(
+    sharedPlaylist: SharedPlaylist,
+    playlistViewModel: PlaylistViewModel,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    val playlistUiState by playlistViewModel.uiState.collectAsState()
+    val playlist = playlistUiState.playlists.find { it.id == sharedPlaylist.playlistId }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.PlaylistPlay,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Shared playlist", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                playlist?.name ?: "Playlist #${sharedPlaylist.playlistId}",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        IconButton(onClick = onAccept) {
+            Icon(Icons.Filled.Check, contentDescription = "Accept", tint = Color(0xFF4CAF50))
+        }
+        IconButton(onClick = onDecline) {
+            Icon(Icons.Filled.Close, contentDescription = "Decline", tint = Color(0xFFE53935))
+        }
+    }
+}
+
+@Composable
+private fun FriendRow(
+    friend: User,
+    onSharePlaylist: () -> Unit,
+    onViewPlaylists: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.Person,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(friend.username, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            Text(friend.email, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+        }
+        IconButton(onClick = onViewPlaylists) {
+            Icon(Icons.Filled.PlaylistPlay, contentDescription = "View Playlists", tint = Color.White)
+        }
+        IconButton(onClick = onSharePlaylist) {
+            Icon(Icons.Filled.Share, contentDescription = "Share Playlist", tint = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun SharePlaylistDialog(
+    playlists: List<lt.viko.eif.mtrimaitis.Slingo.data.models.Playlist>,
+    onDismiss: () -> Unit,
+    onShare: (Long) -> Unit
+) {
+    var selectedPlaylistId by remember { mutableLongStateOf(-1L) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1F1D2B),
+        tonalElevation = 8.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text("Share Playlist", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (playlists.isEmpty()) {
+                    Text("No playlists available", color = Color.White.copy(alpha = 0.7f))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.height(300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(playlists.size) { index ->
+                            val playlist = playlists[index]
+                            Surface(
+                                color = if (selectedPlaylistId == playlist.id) 
+                                    Color.White.copy(alpha = 0.15f) 
+                                else 
+                                    Color.White.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedPlaylistId = playlist.id }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.PlaylistPlay,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(playlist.name, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (selectedPlaylistId > 0) onShare(selectedPlaylistId) },
+                enabled = selectedPlaylistId > 0,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Share")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 private enum class ProfileTab(val title: String) {
     Overview("Overview"),
+    Friends("Friends"),
     Settings("Settings")
+}
+
+@Composable
+private fun FriendPlaylistsDialog(
+    friendName: String,
+    playlists: List<lt.viko.eif.mtrimaitis.Slingo.data.models.Playlist>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1F1D2B),
+        tonalElevation = 8.dp,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Text("$friendName's Playlists", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (playlists.isEmpty()) {
+                    Text("No playlists available", color = Color.White.copy(alpha = 0.7f))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.height(300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(playlists.size) { index ->
+                            val playlist = playlists[index]
+                            Surface(
+                                color = Color.White.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.PlaylistPlay,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(playlist.name, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                        Text("${playlist.id} songs", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 private enum class PasswordChangeStep {

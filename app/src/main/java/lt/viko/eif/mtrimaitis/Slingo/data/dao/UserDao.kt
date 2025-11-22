@@ -16,6 +16,12 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     fun getUserById(id: Long): Flow<User?>
 
+    @Query("SELECT * FROM users WHERE username LIKE :query OR email LIKE :query")
+    suspend fun searchUsers(query: String): List<User>
+
+    @Query("SELECT * FROM users WHERE id != :excludeUserId")
+    suspend fun getAllUsersExcept(excludeUserId: Long): List<User>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User): Long
 

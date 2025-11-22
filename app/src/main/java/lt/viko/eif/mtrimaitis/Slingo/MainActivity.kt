@@ -11,8 +11,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import lt.viko.eif.mtrimaitis.Slingo.data.FriendRepository
 import lt.viko.eif.mtrimaitis.Slingo.data.LoginRepository
 import lt.viko.eif.mtrimaitis.Slingo.data.PlaylistRepository
+import lt.viko.eif.mtrimaitis.Slingo.data.SharedPlaylistRepository
 import lt.viko.eif.mtrimaitis.Slingo.data.SongRepository
 import lt.viko.eif.mtrimaitis.Slingo.data.database.DatabaseProvider
 import lt.viko.eif.mtrimaitis.Slingo.viewmodel.AuthViewModel
@@ -40,6 +42,8 @@ fun SlingoApp() {
     val songRepository = remember { SongRepository(database.songDao()) }
     val playlistRepository = remember { PlaylistRepository(database.playlistDao()) }
     val favoriteRepository = remember { lt.viko.eif.mtrimaitis.Slingo.data.FavoriteRepository(database.favoriteDao()) }
+    val friendRepository = remember { FriendRepository(database.userDao(), database.friendRequestDao(), database.friendshipDao()) }
+    val sharedPlaylistRepository = remember { SharedPlaylistRepository(database.sharedPlaylistDao(), database.playlistDao()) }
     
     val authViewModel: AuthViewModel = viewModel { 
         AuthViewModel(loginRepository)
@@ -70,6 +74,8 @@ fun SlingoApp() {
                         songRepository = songRepository,
                         playlistRepository = playlistRepository,
                         favoriteRepository = favoriteRepository,
+                        friendRepository = friendRepository,
+                        sharedPlaylistRepository = sharedPlaylistRepository,
                         authViewModel = authViewModel,
                         currentUserId = authViewModel.uiState.value.currentUser?.id ?: 0L
                     ) 

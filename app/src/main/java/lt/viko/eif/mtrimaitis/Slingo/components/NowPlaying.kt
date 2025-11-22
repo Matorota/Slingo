@@ -199,6 +199,22 @@ fun NowPlayingScreen(
             }
 
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = "This feature is disabled for now because of a paywall of spotify and other api",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Row(
