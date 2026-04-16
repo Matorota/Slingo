@@ -31,7 +31,7 @@ This project is currently **work in progress** and evolving quickly.
 
 ##  Tech Stack
 
-- **Kotlin** (100%)
+- **Kotlin** 
 - **Android Studio**
 - **Gradle Kotlin DSL (`build.gradle.kts`)**
 - **Material Design UI**
