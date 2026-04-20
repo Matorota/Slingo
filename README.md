@@ -36,6 +36,6 @@ This project is currently **work in progress** and evolving quickly.
 - **Gradle Kotlin DSL (`build.gradle.kts`)**
 - **Material Design UI**
 - **YouTube API** (configured)
-- - **Spotify API** (configured)
+- **Spotify API** (configured)
 
 ---
